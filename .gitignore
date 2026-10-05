@@ -42,3 +42,8 @@ Thumbs.db
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
 logs/
+
+# ── Personal / Agent work files (never push to GitHub) ───────────────────────
+kedar.md
+req.md
+.agents/
