@@ -18,14 +18,15 @@ import os
 import sys
 import time
 
-try:
-    from pyspark.sql import SparkSession
-    from pyspark.sql import functions as F
-    from pyspark.sql import types as T
-    from pyspark.sql.window import Window
-except ImportError:
-    print("[ERROR] PySpark not found. Run: pip install pyspark")
-    sys.exit(1)
+# Bootstrap PySpark from the local Spark installation (no pip install needed)
+SPARK_HOME = os.environ.get("SPARK_HOME", "/home/kedar/spark")
+sys.path.insert(0, os.path.join(SPARK_HOME, "python"))
+sys.path.insert(0, os.path.join(SPARK_HOME, "python", "lib", "py4j-0.10.9.7-src.zip"))
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+from pyspark.sql.window import Window
 
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 INPUT_PATH  = os.path.join(SCRIPT_DIR, "output", "cdc_logs.jsonl")
