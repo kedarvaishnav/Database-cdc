@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Spark & Hive artifacts
+derby.log
+metastore_db/
+spark-warehouse/
+warehouse/
+*.parquet
+*.parquet/
+*.crc
+
+# Generated CDC data & outputs
+src/output/
+output/
+data/
+*.jsonl
+
+# Logs
+*.log
+logs/
+
+# Sensitive & Personal Markdown Guides
+INTERVIEW_PREP.md
+docs/INTERVIEW_PREP.md
+kedar.md
+req.md
+abel.md
+harshf.md
+.agents/
+
+# Environment & Credentials
+.env
+*.env
+*.pem
+*.key
