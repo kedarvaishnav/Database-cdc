@@ -1,6 +1,6 @@
 # CDC Event Replay & Aggregation Pipeline
 
-A data engineering project that reconstructs the final, accurate state of database records from a massive, out-of-order stream of **Change Data Capture (CDC)** logs using PySpark window functions and Apache Hive / Spark SQL.
+A production-grade data engineering project that reconstructs the final, accurate state of database records from a massive, out-of-order stream of **Change Data Capture (CDC)** logs using PySpark window functions and Apache Hive / Spark SQL.
 
 ## Problem
 
@@ -21,76 +21,84 @@ ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY timestamp DESC, transaction_i
 ## Project Structure
 
 ```
-src/
-├── generate_cdc_data.py     # Generates 100,000 synthetic JSONL CDC logs
-├── cdc_processor.py         # PySpark pipeline: JSONL → deduplicated Parquet
-├── test_cdc_validation.py   # Edge-case validation tests (DELETE, UPDATE, out-of-order)
-├── create_hive_tables.hql   # Hive / Spark SQL external table DDL
-├── setup_hive.sh            # Warehouse directory setup
-├── validate_cdc.hql         # 6 SQL validation queries
-└── output/                  # Generated data (gitignored)
-    ├── cdc_logs.jsonl
-    └── final_state.parquet/
+├── ARCHITECTURE.md          # In-depth technical architecture and design document
+├── README.md                # Project documentation and execution instructions
+├── demo.sh                  # Automated end-to-end demonstration script
+├── src/
+│   ├── generate_cdc_data.py # Generates 100,000 synthetic JSONL CDC logs
+│   ├── cdc_processor.py     # PySpark pipeline: JSONL → deduplicated Parquet
+│   ├── test_cdc_validation.py # Verification tests for CDC deduplication
+│   ├── create_hive_tables.hql # Hive / Spark SQL external table DDL
+│   ├── setup_hive.sh        # Warehouse directory setup
+│   ├── validate_cdc.hql     # 6 SQL validation queries
+│   └── output/              # Generated data (gitignored)
+│       ├── cdc_logs.jsonl
+│       └── final_state.parquet/
+└── tests/
+    ├── conftest.py          # Pytest shared fixtures and memory pipeline
+    ├── test_cdc_edge_cases.py # Edge-case suite: DELETE, late arrivals, out-of-order
+    ├── test_idempotency.py  # Idempotency validation (Run 1 == Run 2)
+    └── test_performance.py  # Execution duration & throughput benchmarking
 ```
 
 ## Prerequisites
 
-- **Python 3.8+** with `pyspark` (`pip install pyspark`)
+- **Python 3.8+** with `pyspark` and `pytest` (`pip install pyspark pytest`)
 - **Java 11+** (OpenJDK 11 installed in Ubuntu WSL)
 - **Spark / Hive** (`spark-sql` or `hive` CLI)
 
-## How to Run & Test Manually in Ubuntu WSL
+## How to Run & Test in Ubuntu WSL
 
 All components run directly inside Ubuntu WSL:
 
 ### 1. Open WSL and Navigate to the Project
 ```bash
+wsl -d Ubuntu
 cd /home/kedar/database-cdc
 ```
 
-### 2. Generate CDC Data (100,000 Events)
+### 2. Run the Automated Demo Script
+```bash
+./demo.sh
+```
+*(Executes data generation, PySpark processing, test suites, warehouse setup, and SQL queries automatically)*
+
+### 3. Step-by-Step Manual Execution
+
+#### Step 3.1: Generate CDC Data (100,000 Events)
 ```bash
 python3 src/generate_cdc_data.py
 ```
-*Expected: 100,000 JSONL events generated in `src/output/cdc_logs.jsonl` with ~24 MB size.*
+*Expected: 100,000 JSONL events generated in `src/output/cdc_logs.jsonl` with ~24.5 MB size.*
 
-### 3. Run PySpark Deduplication Pipeline
+#### Step 3.2: Run PySpark Deduplication Pipeline
 ```bash
 python3 src/cdc_processor.py
 ```
 *Expected: Reads 100,000 events, computes latest state using `ROW_NUMBER()`, writes deduplicated records to `src/output/final_state.parquet`, reports 0 duplicates in ~13 seconds.*
 
-### 4. Run Automated Validation Tests
+#### Step 3.3: Run Quality & Edge-Case Test Suites
 ```bash
-python3 src/test_cdc_validation.py
+pytest tests/ -v
 ```
-*Expected: 4 passed, 0 failed.*
-- `test_delete_removes_record` (verifies deleted records do not appear)
-- `test_update_keeps_latest` (verifies only the latest state is retained)
-- `test_out_of_order_arrival` (verifies out-of-order events resolve correctly)
-- `test_no_duplicates_in_real_output` (verifies 0 duplicates in real Parquet output)
+*Expected: 6 passed in ~17 seconds.*
+- `test_delete_semantics` (verifies deleted records do not appear in output)
+- `test_late_arrivals` (verifies older late-arriving events do not overwrite newer state)
+- `test_out_of_order_updates` (verifies shuffled updates resolve to newest timestamp)
+- `test_no_duplicates` (verifies duplicate event transmissions produce 1 record)
+- `test_idempotency` (verifies repeated executions yield identical records)
+- `test_performance` (verifies high throughput and execution within SLA)
 
-### 5. Create Hive Table & Run Validation Queries
-
-Set up warehouse directory:
+#### Step 3.4: Create Warehouse Table & Run Analytics Queries
 ```bash
 bash src/setup_hive.sh
-```
-
-Create Hive external table over Parquet data:
-```bash
 spark-sql -f src/create_hive_tables.hql
-```
-*(Or `hive -f src/create_hive_tables.hql` if HDFS NameNode is active)*
-
-Run the 6 validation queries:
-```bash
 spark-sql -f src/validate_cdc.hql
 ```
 *Queries executed:*
-1. Total Record Count (~34,767 records)
-2. Duplicate Check (Total = 34,767, Unique = 34,767, Duplicates = 0)
-3. Status Distribution (ACTIVE ~70%, INACTIVE ~20%, SUSPENDED ~10%)
+1. Total Record Count (`34,767` records)
+2. Duplicate Check (`total = 34,767`, `unique = 34,767`, `duplicates = 0`)
+3. Status Distribution (`ACTIVE ~70%`, `INACTIVE ~20%`, `SUSPENDED ~10%`)
 4. High-Value Customers (Top 10 balances > $50,000)
 5. Timestamp Range (Jan 1 to Jan 31, 2024)
 6. Sample Record inspection
@@ -127,8 +135,8 @@ spark-sql -f src/validate_cdc.hql
 
 ## Team Contributions
 
-| Member  | Branch           | Contribution                     |
-|---------|------------------|----------------------------------|
-| Kedar   | `feature/spark`  | Data generator + PySpark pipeline |
-| Abel    | `feature/hive`   | Hive DDL + SQL validation queries |
-| Harsh   | `feature/quality`| Tests + documentation             |
+| Member        | Branch            | Contribution                                             |
+|---------------|-------------------|----------------------------------------------------------|
+| Kedar         | `feature/spark`   | Data generator + PySpark window deduplication pipeline   |
+| Abel          | `feature/hive`    | Hive / Spark SQL DDL + validation queries                |
+| HarshKumar133 | `feature/quality` | Edge-case, idempotency, performance tests + architecture |

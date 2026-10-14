@@ -1,51 +1,50 @@
-# Generated data files
-src/output/
-*.jsonl
-*.parquet
-
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-.eggs/
-*.egg
-.venv/
-venv/
+*$py.class
+*.so
+.Python
 env/
+venv/
+.venv/
 
-# Spark / Hadoop
-spark-warehouse/
-metastore_db/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Spark & Hive artifacts
 derby.log
-.spark-staging/
+metastore_db/
+spark-warehouse/
+warehouse/
+*.parquet
+*.parquet/
 *.crc
 
-# Hive
-hive-warehouse/
-*.hiverc
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# OS / IDE
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
-*.swo
+# Generated CDC data & outputs
+src/output/
+output/
+data/
+*.jsonl
 
 # Logs
 *.log
 logs/
 
-# Personal / Agent work files
+# Sensitive & Personal Markdown Guides
+INTERVIEW_PREP.md
+docs/INTERVIEW_PREP.md
 kedar.md
 req.md
 abel.md
 harshf.md
 .agents/
+
+# OS & Environment
+.DS_Store
+Thumbs.db
+.env
+*.env
+*.pem
+*.key
