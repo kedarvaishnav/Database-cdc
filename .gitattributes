@@ -1,0 +1,9 @@
+# Normalize line endings to LF on checkout
+* text=auto eol=lf
+
+# Keep shell scripts as LF even on Windows
+*.sh text eol=lf
+
+# Binary files
+*.parquet binary
+*.jsonl text eol=lf

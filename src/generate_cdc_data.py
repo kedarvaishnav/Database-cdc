@@ -4,17 +4,14 @@ CDC log generator.
 Produces 100,000 synthetic JSONL records simulating an out-of-order
 CDC event stream (INSERT / UPDATE / DELETE) for January 2024.
 
-Usage:
-    python src/generate_cdc_data.py
-Output:
-    src/output/cdc_logs.jsonl  (~15-20 MB)
+Usage:  python src/generate_cdc_data.py
+Output: src/output/cdc_logs.jsonl (~15-20 MB)
 """
 
 import json
 import os
 import random
 import string
-import sys
 from datetime import datetime, timedelta
 
 NUM_RECORDS = 100_000
@@ -40,20 +37,20 @@ STATUSES = ["ACTIVE", "INACTIVE", "SUSPENDED"]
 STATUS_WEIGHTS = [0.70, 0.20, 0.10]
 
 JAN_START = datetime(2024, 1, 1, 0, 0, 0)
-JAN_END   = datetime(2024, 1, 31, 23, 59, 59)
+JAN_END = datetime(2024, 1, 31, 23, 59, 59)
 JAN_SECONDS = int((JAN_END - JAN_START).total_seconds())
 
 
-def _random_name() -> str:
+def _random_name():
     return f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
 
 
-def _random_email(name: str) -> str:
+def _random_email(name):
     slug = name.lower().replace(" ", ".")
     return f"{slug}{random.randint(1, 999)}@{random.choice(EMAIL_DOMAINS)}"
 
 
-def _random_payload(record_id: str) -> dict:
+def _random_payload():
     name = _random_name()
     return {
         "user_name": name,
@@ -64,7 +61,7 @@ def _random_payload(record_id: str) -> dict:
     }
 
 
-def _random_timestamp(base_ts: datetime, is_late: bool) -> str:
+def _random_timestamp(base_ts, is_late):
     ts = base_ts
     if is_late:
         ts = ts - timedelta(days=random.randint(*LATE_ARRIVAL_DAYS))
@@ -73,15 +70,11 @@ def _random_timestamp(base_ts: datetime, is_late: bool) -> str:
     return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _txn_id() -> str:
+def _txn_id():
     return "txn_" + "".join(random.choices(string.digits, k=10))
 
 
-def generate_cdc_logs(
-    num_records: int = NUM_RECORDS,
-    num_unique_ids: int = NUM_UNIQUE_IDS,
-    output_path: str = None,
-) -> str:
+def generate_cdc_logs(num_records=NUM_RECORDS, num_unique_ids=NUM_UNIQUE_IDS, output_path=None):
     """Generate CDC log entries and write as JSONL. Returns the output path."""
     if output_path is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -93,14 +86,13 @@ def generate_cdc_logs(
     record_ids = [f"user_{i:05d}" for i in range(1, num_unique_ids + 1)]
     records = []
 
-    # Phase 1: INSERT — one per unique ID (up to 20K)
     insert_ids = random.sample(record_ids, min(20_000, num_unique_ids))
     for rid in insert_ids:
         offset = random.randint(0, JAN_SECONDS)
         records.append({
             "record_id": rid,
             "operation": "INSERT",
-            "payload": _random_payload(rid),
+            "payload": _random_payload(),
             "timestamp": _random_timestamp(JAN_START + timedelta(seconds=offset),
                                            random.random() < LATE_ARRIVAL_FRACTION),
             "transaction_id": _txn_id(),
@@ -110,26 +102,24 @@ def generate_cdc_logs(
     update_target = int(remaining * 0.75)
     delete_target = remaining - update_target
 
-    # Phase 2: UPDATE
     for _ in range(update_target):
         rid = random.choice(record_ids)
         offset = random.randint(0, JAN_SECONDS)
         records.append({
             "record_id": rid,
             "operation": "UPDATE",
-            "payload": _random_payload(rid),
+            "payload": _random_payload(),
             "timestamp": _random_timestamp(JAN_START + timedelta(seconds=offset),
                                            random.random() < LATE_ARRIVAL_FRACTION),
             "transaction_id": _txn_id(),
         })
 
-    # Phase 3: DELETE
     for rid in random.sample(record_ids, min(delete_target, num_unique_ids)):
         offset = random.randint(0, JAN_SECONDS)
         records.append({
             "record_id": rid,
             "operation": "DELETE",
-            "payload": _random_payload(rid),
+            "payload": _random_payload(),
             "timestamp": _random_timestamp(JAN_START + timedelta(seconds=offset),
                                            random.random() < LATE_ARRIVAL_FRACTION),
             "transaction_id": _txn_id(),
@@ -144,7 +134,7 @@ def generate_cdc_logs(
     return output_path
 
 
-def validate_output(path: str) -> None:
+def validate_output(path):
     """Quick sanity check on the generated JSONL file."""
     if not os.path.exists(path):
         raise FileNotFoundError(f"Output file not found: {path}")
@@ -165,7 +155,9 @@ def validate_output(path: str) -> None:
                 rec = json.loads(line)
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON at line {i+1}: {e}")
-            op_counts[rec.get("operation", "UNKNOWN")] = op_counts.get(rec.get("operation"), 0) + 1
+            op = rec.get("operation", "UNKNOWN")
+            if op in op_counts:
+                op_counts[op] += 1
             unique_ids.add(rec.get("record_id"))
             total += 1
 
@@ -175,8 +167,8 @@ def validate_output(path: str) -> None:
     print(f"  UPDATE        : {op_counts['UPDATE']:,}")
     print(f"  DELETE        : {op_counts['DELETE']:,}")
 
-    assert total == NUM_RECORDS,    f"Expected {NUM_RECORDS} records, got {total}"
-    assert size_mb >= 10,           f"File too small ({size_mb:.2f} MB)"
+    assert total == NUM_RECORDS, f"Expected {NUM_RECORDS} records, got {total}"
+    assert size_mb >= 10, f"File too small ({size_mb:.2f} MB)"
     assert op_counts["INSERT"] > 0, "No INSERT records found"
     assert op_counts["UPDATE"] > 0, "No UPDATE records found"
     assert op_counts["DELETE"] > 0, "No DELETE records found"

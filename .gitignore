@@ -1,9 +1,9 @@
-# ── Generated data files ──────────────────────────────────────────────────────
+# Generated data files
 src/output/
 *.jsonl
 *.parquet
 
-# ── Python ────────────────────────────────────────────────────────────────────
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -16,22 +16,22 @@ build/
 venv/
 env/
 
-# ── Spark / Hadoop ────────────────────────────────────────────────────────────
+# Spark / Hadoop
 spark-warehouse/
 metastore_db/
 derby.log
 .spark-staging/
 *.crc
 
-# ── Hive ─────────────────────────────────────────────────────────────────────
+# Hive
 hive-warehouse/
 *.hiverc
 
-# ── Jupyter ───────────────────────────────────────────────────────────────────
+# Jupyter
 .ipynb_checkpoints/
 *.ipynb
 
-# ── OS / IDE ─────────────────────────────────────────────────────────────────
+# OS / IDE
 .DS_Store
 Thumbs.db
 .idea/
@@ -39,12 +39,13 @@ Thumbs.db
 *.swp
 *.swo
 
-# ── Logs ──────────────────────────────────────────────────────────────────────
+# Logs
 *.log
 logs/
 
-# ── Personal / Agent work files (never push to GitHub) ───────────────────────
+# Personal / Agent work files
 kedar.md
 req.md
 abel.md
+harshf.md
 .agents/
