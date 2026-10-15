@@ -24,6 +24,8 @@ ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY timestamp DESC, transaction_i
 ├── ARCHITECTURE.md          # In-depth technical architecture and design document
 ├── README.md                # Project documentation and execution instructions
 ├── demo.sh                  # Automated end-to-end demonstration script
+├── app.py                   # Minimal Streamlit interface for both CDC datasets
+├── requirements-frontend.txt # Streamlit dependency for the optional UI
 ├── src/
 │   ├── generate_cdc_data.py # Generates 100,000 synthetic JSONL CDC logs
 │   ├── fetch_stackoverflow_revisions.py # Fetches a small real revision-history sample
@@ -47,6 +49,7 @@ ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY timestamp DESC, transaction_i
 ## Prerequisites
 
 - **Python 3.8+** with `pyspark` and `pytest` (`pip install pyspark pytest`)
+- **Streamlit 1.57+** for the optional browser UI (`pip install -r requirements-frontend.txt`)
 - **Java 11+** (OpenJDK 11 installed in Ubuntu WSL)
 - **Spark / Hive** (`spark-sql` or `hive` CLI)
 
@@ -72,21 +75,40 @@ To run the same demo against the real Stack Overflow revision sample instead:
 bash run_stackoverflow_demo.sh
 ```
 
-### 3. Step-by-Step Manual Execution
+### 3. Launch the Minimal Frontend
 
-#### Step 3.1: Generate CDC Data (100,000 Events)
+From the WSL project directory, create the local UI environment once, install
+the frontend dependency, and start the app:
+
+```bash
+cd /home/kedar/database-cdc
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+python -m pip install -r requirements-frontend.txt
+streamlit run app.py
+```
+
+The page lets you select synthetic customer events or the bundled Stack
+Overflow revision sample, run the existing Spark reducer, inspect a sample of
+the incoming events, and browse the final Parquet rows. Payload fields are
+detected from the selected dataset, so the UI does not depend on matching
+column order or a fixed payload schema. Stop the local server with `Ctrl+C`.
+
+### 4. Step-by-Step Manual Execution
+
+#### Step 4.1: Generate CDC Data (100,000 Events)
 ```bash
 python3 src/generate_cdc_data.py
 ```
 *Expected: 100,000 JSONL events generated in `src/output/cdc_logs.jsonl` with ~24.5 MB size.*
 
-#### Step 3.2: Run PySpark Deduplication Pipeline
+#### Step 4.2: Run PySpark Deduplication Pipeline
 ```bash
 python3 src/cdc_processor.py
 ```
 *Expected: Reads 100,000 events, computes latest state using `ROW_NUMBER()`, writes deduplicated records to `src/output/final_state.parquet`, reports 0 duplicates in ~13 seconds.*
 
-#### Step 3.3: Run Quality & Edge-Case Test Suites
+#### Step 4.3: Run Quality & Edge-Case Test Suites
 ```bash
 pytest tests/ -v
 ```
@@ -99,7 +121,7 @@ pytest tests/ -v
 - `test_idempotency` (verifies repeated executions yield identical records)
 - `test_performance` (verifies high throughput and execution within SLA)
 
-#### Step 3.4: Create Warehouse Table & Run Analytics Queries
+#### Step 4.4: Create Warehouse Table & Run Analytics Queries
 ```bash
 bash src/setup_hive.sh
 spark-sql -f src/create_hive_tables.hql
