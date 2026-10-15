@@ -8,8 +8,12 @@ from pyspark.sql import types as T
 from pyspark.sql.window import Window
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INPUT_PATH = os.path.join(SCRIPT_DIR, "output", "cdc_logs.jsonl")
-OUTPUT_PATH = os.path.join(SCRIPT_DIR, "output", "final_state.parquet")
+INPUT_PATH = os.environ.get(
+    "CDC_INPUT_PATH", os.path.join(SCRIPT_DIR, "output", "cdc_logs.jsonl")
+)
+OUTPUT_PATH = os.environ.get(
+    "CDC_OUTPUT_PATH", os.path.join(SCRIPT_DIR, "output", "final_state.parquet")
+)
 
 PAYLOAD_SCHEMA = T.StructType([
     T.StructField("user_name", T.StringType(), True),
@@ -18,11 +22,6 @@ PAYLOAD_SCHEMA = T.StructType([
     T.StructField("status", T.StringType(), True),
     T.StructField("balance", T.DoubleType(), True),
 ])
-
-FINAL_COLUMNS = [
-    "record_id", "user_name", "email", "age", "status", "balance", "timestamp"
-]
-
 
 def build_spark():
     return (
@@ -37,30 +36,42 @@ def build_spark():
 
 
 def flatten_payload(raw):
-    """Extract nested payload fields into top-level columns and cast timestamp."""
-    if isinstance(raw.schema["payload"].dataType, T.StructType):
-        flat = raw.select(
-            "record_id", "operation", "transaction_id",
-            F.col("timestamp").alias("ts_raw"),
-            F.col("payload.user_name").alias("user_name"),
-            F.col("payload.email").alias("email"),
-            F.col("payload.age").cast(T.IntegerType()).alias("age"),
-            F.col("payload.status").alias("status"),
-            F.col("payload.balance").cast(T.DoubleType()).alias("balance"),
-        )
+    """Flatten all payload fields and parse the event timestamp.
+
+    Keeping payload fields dynamic allows the same reducer to process different
+    source schemas, such as customer records and Stack Exchange revisions.
+    """
+    if "payload" not in raw.columns:
+        raise ValueError("CDC input must contain a 'payload' field")
+
+    payload_type = raw.schema["payload"].dataType
+    if isinstance(payload_type, T.StructType):
+        payload_columns = []
+        for field in payload_type.fields:
+            value = F.col("payload").getField(field.name)
+            # Keep the established customer Parquet/Hive schema stable while
+            # leaving all other source payload fields inferred dynamically.
+            if field.name == "age":
+                value = value.cast(T.IntegerType())
+            elif field.name == "balance":
+                value = value.cast(T.DoubleType())
+            payload_columns.append(value.alias(field.name))
+    elif isinstance(payload_type, T.StringType):
+        # Backward compatibility for JSONL files whose payload is JSON text.
+        parsed = raw.withColumn("_parsed_payload", F.from_json("payload", PAYLOAD_SCHEMA))
+        payload_columns = [
+            F.col("_parsed_payload").getField(field.name).alias(field.name)
+            for field in PAYLOAD_SCHEMA.fields
+        ]
+        raw = parsed
     else:
-        flat = raw.select(
-            "record_id", "operation", "transaction_id",
-            F.col("timestamp").alias("ts_raw"),
-            F.from_json(F.col("payload"), PAYLOAD_SCHEMA).alias("p"),
-        ).select(
-            "record_id", "operation", "transaction_id", "ts_raw",
-            F.col("p.user_name").alias("user_name"),
-            F.col("p.email").alias("email"),
-            F.col("p.age").cast(T.IntegerType()).alias("age"),
-            F.col("p.status").alias("status"),
-            F.col("p.balance").cast(T.DoubleType()).alias("balance"),
-        )
+        raise TypeError(f"Unsupported payload type: {payload_type.simpleString()}")
+
+    flat = raw.select(
+        "record_id", "operation", "transaction_id",
+        F.col("timestamp").alias("ts_raw"),
+        *payload_columns,
+    )
 
     return flat.withColumn(
         "timestamp",
@@ -75,13 +86,17 @@ def deduplicate_cdc(flat):
         .orderBy(F.col("timestamp").desc(), F.col("transaction_id").desc())
     )
 
+    output_columns = [
+        name for name in flat.columns if name not in {"operation", "transaction_id"}
+    ]
+
     return (
         flat
         .withColumn("rn", F.row_number().over(window_spec))
         .filter(F.col("rn") == 1)
         .drop("rn")
         .filter(F.col("operation") != "DELETE")
-        .select(*FINAL_COLUMNS)
+        .select(*output_columns)
     )
 
 
@@ -94,7 +109,7 @@ def process_cdc(spark):
     flat = flatten_payload(raw)
     final = deduplicate_cdc(flat)
 
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    os.makedirs(os.path.dirname(OUTPUT_PATH) or ".", exist_ok=True)
     print(f"Writing deduplicated output to Parquet: {OUTPUT_PATH}")
     final.coalesce(1).write.mode("overwrite").parquet(OUTPUT_PATH)
 
