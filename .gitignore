@@ -27,6 +27,10 @@ src/output/
 output/
 data/
 *.jsonl
+!data/
+data/*
+!data/ATTRIBUTION.md
+!data/stackoverflow_revisions.jsonl
 
 # Logs
 *.log

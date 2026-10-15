@@ -28,6 +28,42 @@ echo "          DATABASE CDC PIPELINE: END-TO-END AUTOMATED DEMO             "
 echo "========================================================================"
 
 # ------------------------------------------------------------------------------
+# Optional real-data demonstration
+# ------------------------------------------------------------------------------
+if [[ "${1:-}" == "--stackoverflow" ]]; then
+    echo ""
+    echo "Running the Stack Overflow revision-history demo..."
+    echo "------------------------------------------------------------------------"
+    python3 src/fetch_stackoverflow_revisions.py
+
+    export CDC_INPUT_PATH="$SCRIPT_DIR/data/stackoverflow_revisions.jsonl"
+    export CDC_OUTPUT_PATH="$SCRIPT_DIR/src/output/stackoverflow_final_state.parquet"
+    if command -v spark-submit >/dev/null 2>&1; then
+        spark-submit --driver-memory 4g "$SCRIPT_DIR/src/cdc_processor.py"
+    else
+        python3 "$SCRIPT_DIR/src/cdc_processor.py"
+    fi
+
+    echo ""
+    echo "Running regression and real-data tests..."
+    pytest tests/ -v
+
+    echo ""
+    echo "Querying the Stack Overflow final-state table..."
+    spark-sql -f src/create_stackoverflow_hive_tables.hql
+    spark-sql -f src/validate_stackoverflow_cdc.hql
+
+    echo ""
+    echo "REAL-DATA DEMO COMPLETE: revision events reduced to one state per post."
+    exit 0
+fi
+
+if [[ $# -gt 0 && "${1:-}" != "--synthetic" ]]; then
+    echo "Usage: ./demo.sh [--synthetic | --stackoverflow]"
+    exit 2
+fi
+
+# ------------------------------------------------------------------------------
 # STEP 1: Show Raw Data
 # ------------------------------------------------------------------------------
 echo ""
